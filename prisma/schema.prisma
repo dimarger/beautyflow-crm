@@ -1,0 +1,352 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+enum PlatformRole {
+  USER
+  SUPERADMIN
+}
+
+enum TenantStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum TenantRole {
+  OWNER
+  ADMIN
+  MASTER
+}
+
+enum MembershipStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+}
+
+enum StaffStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum WorkPeriodType {
+  WORKING
+  TIME_OFF
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CHECKED_IN
+  COMPLETED
+  CANCELLED_BY_CLIENT
+  CANCELLED_BY_SALON
+  NO_SHOW
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+enum BillingInterval {
+  MONTH
+  YEAR
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  VOID
+  UNCOLLECTIBLE
+}
+
+enum PaymentEventType {
+  PAYMENT_CREATED
+  PAYMENT_SUCCEEDED
+  PAYMENT_FAILED
+  REFUND_CREATED
+  REFUND_SUCCEEDED
+}
+
+model Tenant {
+  id            String               @id @default(uuid()) @db.Uuid
+  name          String
+  slug          String               @unique
+  status        TenantStatus         @default(TRIAL)
+  timezone      String               @default("Europe/Moscow")
+  currency      String               @default("RUB") @db.Char(3)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  memberships   TenantMembership[]
+  customers     Customer[]
+  staff         Staff[]
+  services      Service[]
+  appointments  Appointment[]
+  subscriptions Subscription[]
+  invoices      Invoice[]
+  paymentLogs   PaymentLog[]
+
+  @@map("tenants")
+}
+
+model User {
+  id            String               @id @default(uuid()) @db.Uuid
+  email         String               @unique
+  phone         String?              @unique
+  passwordHash  String
+  firstName     String
+  lastName      String
+  platformRole  PlatformRole         @default(USER)
+  isActive      Boolean              @default(true)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  memberships   TenantMembership[]
+  staffProfiles Staff[]
+
+  @@map("users")
+}
+
+model TenantMembership {
+  id        String           @id @default(uuid()) @db.Uuid
+  tenantId  String           @db.Uuid
+  userId    String           @db.Uuid
+  role      TenantRole
+  status    MembershipStatus @default(INVITED)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([userId, status])
+  @@map("tenant_memberships")
+}
+
+model Customer {
+  id           String        @id @default(uuid()) @db.Uuid
+  tenantId     String        @db.Uuid
+  firstName    String
+  lastName     String?
+  phone        String
+  email        String?
+  notes        String?
+  marketingOk  Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@unique([tenantId, phone])
+  @@unique([id, tenantId])
+  @@index([tenantId, lastName, firstName])
+  @@map("customers")
+}
+
+model Staff {
+  id           String         @id @default(uuid()) @db.Uuid
+  tenantId     String         @db.Uuid
+  userId       String?        @db.Uuid
+  displayName  String
+  status       StaffStatus    @default(ACTIVE)
+  color        String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user         User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  services     StaffService[]
+  appointments Appointment[]
+  workPeriods  StaffWorkPeriod[]
+
+  @@unique([tenantId, userId])
+  @@unique([id, tenantId])
+  @@index([tenantId, status])
+  @@map("staff")
+}
+
+model StaffWorkPeriod {
+  id        String         @id @default(uuid()) @db.Uuid
+  tenantId  String         @db.Uuid
+  staffId   String         @db.Uuid
+  type      WorkPeriodType @default(WORKING)
+  startsAt  DateTime
+  endsAt    DateTime
+  note      String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  staff     Staff          @relation(fields: [staffId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@index([tenantId, staffId, startsAt, endsAt])
+  @@map("staff_work_periods")
+}
+
+model Service {
+  id           String            @id @default(uuid()) @db.Uuid
+  tenantId     String            @db.Uuid
+  name         String
+  description  String?
+  durationMin  Int
+  priceMinor   Int
+  currency     String            @default("RUB") @db.Char(3)
+  isActive     Boolean           @default(true)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  tenant       Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  staff        StaffService[]
+  bookingItems AppointmentItem[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, isActive])
+  @@map("services")
+}
+
+model StaffService {
+  tenantId          String  @db.Uuid
+  staffId           String  @db.Uuid
+  serviceId         String  @db.Uuid
+  durationOverride  Int?
+  priceOverride     Int?
+  staff             Staff   @relation(fields: [staffId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  service           Service @relation(fields: [serviceId, tenantId], references: [id, tenantId], onDelete: Cascade)
+
+  @@id([staffId, serviceId])
+  @@index([tenantId, serviceId])
+  @@map("staff_services")
+}
+
+model Appointment {
+  id             String            @id @default(uuid()) @db.Uuid
+  tenantId       String            @db.Uuid
+  customerId     String            @db.Uuid
+  staffId        String            @db.Uuid
+  status         AppointmentStatus @default(PENDING)
+  startsAt       DateTime
+  endsAt         DateTime
+  clientComment  String?
+  internalNotes  String?
+  version        Int               @default(1)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customer       Customer          @relation(fields: [customerId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  staff          Staff             @relation(fields: [staffId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  items          AppointmentItem[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, startsAt])
+  @@index([tenantId, staffId, startsAt, endsAt])
+  @@index([tenantId, customerId, startsAt])
+  @@map("appointments")
+}
+
+model AppointmentItem {
+  id              String      @id @default(uuid()) @db.Uuid
+  tenantId        String      @db.Uuid
+  appointmentId   String      @db.Uuid
+  serviceId       String      @db.Uuid
+  serviceName     String
+  durationMin     Int
+  priceMinor      Int
+  currency        String      @db.Char(3)
+  appointment     Appointment @relation(fields: [appointmentId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  service         Service     @relation(fields: [serviceId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@index([tenantId, appointmentId])
+  @@map("appointment_items")
+}
+
+model Plan {
+  id            String          @id @default(uuid()) @db.Uuid
+  stripePriceId String?         @unique
+  code          String          @unique
+  name          String
+  priceMinor    Int
+  currency      String          @default("RUB") @db.Char(3)
+  interval      BillingInterval
+  staffLimit    Int
+  features      Json
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+model Subscription {
+  id                    String             @id @default(uuid()) @db.Uuid
+  tenantId              String             @db.Uuid
+  planId                String             @db.Uuid
+  status                SubscriptionStatus @default(TRIALING)
+  currentPeriodStart    DateTime
+  currentPeriodEnd      DateTime
+  graceEndsAt           DateTime?
+  cancelAtPeriodEnd     Boolean            @default(false)
+  providerCustomerId    String?
+  providerSubscriptionId String?            @unique
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  tenant                Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  plan                  Plan               @relation(fields: [planId], references: [id], onDelete: Restrict)
+  invoices              Invoice[]
+
+  @@unique([id, tenantId])
+  @@index([tenantId, status])
+  @@map("subscriptions")
+}
+
+model Invoice {
+  id             String        @id @default(uuid()) @db.Uuid
+  tenantId       String        @db.Uuid
+  subscriptionId String        @db.Uuid
+  number         String
+  status         InvoiceStatus @default(DRAFT)
+  subtotalMinor  Int
+  taxMinor       Int           @default(0)
+  totalMinor     Int
+  currency       String        @db.Char(3)
+  dueAt          DateTime?
+  paidAt         DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  tenant         Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subscription   Subscription  @relation(fields: [subscriptionId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  paymentLogs    PaymentLog[]
+
+  @@unique([tenantId, number])
+  @@unique([id, tenantId])
+  @@index([tenantId, status, dueAt])
+  @@map("invoices")
+}
+
+model PaymentLog {
+  id              String           @id @default(uuid()) @db.Uuid
+  tenantId        String           @db.Uuid
+  invoiceId       String?          @db.Uuid
+  provider        String
+  providerEventId String
+  type            PaymentEventType
+  amountMinor     Int?
+  currency        String?          @db.Char(3)
+  payload         Json
+  occurredAt      DateTime
+  createdAt       DateTime         @default(now())
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  invoice         Invoice?         @relation(fields: [invoiceId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([provider, providerEventId])
+  @@index([tenantId, invoiceId, occurredAt])
+  @@map("payment_logs")
+}
