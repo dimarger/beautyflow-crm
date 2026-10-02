@@ -199,7 +199,11 @@ export default function Page() {
 }
 
 function LandingNav() {
-  return <header className="nav"><a className="brand" href="#top"><span>b.</span>beautyflow</a><nav><a href="#pricing">Тарифы</a><a href="#booking">Виджет</a><a href="#calendar">Календарь</a><a href="#owner">Кабинет</a><a href="#superadmin">Суперадмин</a></nav><a className="button small" href="#booking">Демо запись</a></header>;
+  return <header className="nav"><a className="brand" href="#top"><span>b.</span>beautyflow</a><nav><a href="#pricing">Тарифы</a><a href="#booking">Виджет</a><a href="#calendar">Календарь</a><a href="#owner">Кабинет</a><a href="#superadmin">Суперадмин</a></nav><div className="nav-actions"><ActivityBadge /><a className="button small" href="#booking">Демо запись</a></div></header>;
+}
+
+function ActivityBadge() {
+  return <a className="activity-badge" href="#owner" aria-label="Период активности системы"><span className="status-dot" aria-hidden="true" /><span>LIVE</span><strong>99.9% uptime</strong></a>;
 }
 
 function SectionHeader({ kicker, title, text }: { kicker: string; title: string; text: string }) {

@@ -126,6 +126,8 @@ NEXT_PUBLIC_SITE_URL=http://localhost:3000
 
 ## SEO and Marketing Landing
 
+The repository also includes a GitHub Pages workflow for the statically exported frontend demo. It publishes the marketing and interactive UI only; authenticated API, PostgreSQL, Stripe webhooks, Redis and tenant operations still require the full server deployment described below.
+
 The landing page is implemented in `web/app/page.tsx` and includes:
 
 - Hero section with a premium SaaS offer and calendar demo preview.
